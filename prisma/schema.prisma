@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([token])
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role
+  createdAt     DateTime       @default(now())
+  refreshTokens RefreshToken[]
+
+  doctor  Doctor?
+  patient Patient?
+
+  @@index([role])
+}
+
+enum Role {
+  admin
+  doctor
+  patient
+}
+
+model Doctor {
+  id            String         @id @default(cuid())
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String         @unique
+  specialty     String?
+  prescriptions Prescription[]
+
+  @@index([specialty])
+}
+
+model Patient {
+  id            String         @id @default(cuid())
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String         @unique
+  birthDate     DateTime?
+  prescriptions Prescription[]
+}
+
+model Prescription {
+  id         String             @id @default(cuid())
+  code       String             @unique
+  status     PrescriptionStatus @default(pending)
+  notes      String?
+  createdAt  DateTime           @default(now())
+  consumedAt DateTime?
+
+  patient   Patient            @relation(fields: [patientId], references: [id])
+  patientId String
+  author    Doctor             @relation(fields: [authorId], references: [id])
+  authorId  String
+  items     PrescriptionItem[]
+
+  @@index([patientId, status])
+  @@index([authorId, status])
+}
+
+enum PrescriptionStatus {
+  pending
+  consumed
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+  prescriptionId String
+  name           String
+  dosage         String?
+  quantity       Int?
+  instructions   String?
+
+  @@index([name])
+}
