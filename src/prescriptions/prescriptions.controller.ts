@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Get,
@@ -10,6 +10,18 @@ import {
   Query,
   StreamableFile,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -19,19 +31,23 @@ import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { QueryDoctorPrescriptionsDto } from './dto/query-doctor-prescriptions.dto';
 import { QueryPatientPrescriptionsDto } from './dto/query-patient-prescriptions.dto';
 
+@ApiTags('Prescriptions')
+@ApiBearerAuth('access-token')
 @Controller('prescriptions')
 export class PrescriptionsController {
   constructor(
     private readonly prescriptionsService: PrescriptionsService,
-  ) {}
+  ) { }
 
   // ─── Doctor ──────────────────────────────────────────────────────────────────
 
-  /**
-   * POST /api/prescriptions
-   * Creates a new prescription with manually entered items.
-   * Only accessible by doctors.
-   */
+  @ApiOperation({
+    summary: 'Crear prescripcion [doctor]',
+    description: 'El medico autenticado crea una prescripcion para el paciente indicado. Los items se ingresan manualmente (sin catalogo). Se genera un codigo unico RX-* automaticamente.',
+  })
+  @ApiCreatedResponse({ description: 'Prescripcion creada con sus items.' })
+  @ApiNotFoundResponse({ description: 'Perfil de medico o paciente no encontrado.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol doctor.' })
   @Post()
   @Roles(Role.doctor)
   @HttpCode(HttpStatus.CREATED)
@@ -42,11 +58,12 @@ export class PrescriptionsController {
     return this.prescriptionsService.create(user.userId, dto);
   }
 
-  /**
-   * GET /api/prescriptions
-   * Lists the authenticated doctor's prescriptions (paginated + filtered).
-   * Only accessible by doctors.
-   */
+  @ApiOperation({
+    summary: 'Listar prescripciones propias [doctor]',
+    description: 'Retorna las prescripciones emitidas por el medico autenticado. Soporta filtros por estado, rango de fechas y paginacion.',
+  })
+  @ApiOkResponse({ description: 'Lista paginada de prescripciones del medico.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol doctor.' })
   @Get()
   @Roles(Role.doctor)
   findDoctorPrescriptions(
@@ -57,14 +74,13 @@ export class PrescriptionsController {
   }
 
   // ─── Patient ─────────────────────────────────────────────────────────────────
-  // NOTE: literal routes ("mine") MUST be defined before parameterized (":id")
-  // to prevent NestJS from matching "mine" as an id parameter.
 
-  /**
-   * GET /api/prescriptions/mine
-   * Lists the authenticated patient's prescriptions (paginated + filtered).
-   * Only accessible by patients.
-   */
+  @ApiOperation({
+    summary: 'Listar mis prescripciones [paciente]',
+    description: 'Retorna las prescripciones del paciente autenticado. Filtrable por estado (pending/consumed) y con paginacion.',
+  })
+  @ApiOkResponse({ description: 'Lista paginada de prescripciones del paciente.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol patient.' })
   @Get('mine')
   @Roles(Role.patient)
   findPatientPrescriptions(
@@ -76,35 +92,42 @@ export class PrescriptionsController {
 
   // ─── Shared ───────────────────────────────────────────────────────────────────
 
-  /**
-   * GET /api/prescriptions/:id
-   * Returns a single prescription.
-   * - Doctor: only if they authored it.
-   * - Patient: only if it belongs to them.
-   * - Admin: any prescription.
-   */
+  @ApiOperation({
+    summary: 'Obtener prescripcion por ID',
+    description: 'Retorna el detalle completo de una prescripcion con sus items, paciente y medico. Control de acceso: doctor solo ve las que emitio; paciente solo las suyas; admin ve cualquiera.',
+  })
+  @ApiParam({ name: 'id', description: 'ID cuid de la prescripcion' })
+  @ApiOkResponse({ description: 'Detalle de la prescripcion.' })
+  @ApiNotFoundResponse({ description: 'Prescripcion no encontrada o sin acceso.' })
   @Get(':id')
   @Roles(Role.doctor, Role.patient, Role.admin)
   findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.prescriptionsService.findOne(user, id);
   }
 
-  /**
-   * PUT /api/prescriptions/:id/consume
-   * Marks a prescription as consumed (pending → consumed).
-   * Only accessible by the owning patient.
-   */
+  @ApiOperation({
+    summary: 'Consumir prescripcion [paciente]',
+    description: 'Cambia el estado de pending a consumed y registra la fecha de consumo. Solo el paciente propietario puede ejecutar esta accion.',
+  })
+  @ApiParam({ name: 'id', description: 'ID cuid de la prescripcion' })
+  @ApiOkResponse({ description: 'Prescripcion marcada como consumida.' })
+  @ApiNotFoundResponse({ description: 'Prescripcion no encontrada o no pertenece al paciente.' })
+  @ApiConflictResponse({ description: 'La prescripcion ya fue consumida anteriormente.' })
+  @ApiForbiddenResponse({ description: 'Se requiere rol patient.' })
   @Put(':id/consume')
   @Roles(Role.patient)
   consume(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.prescriptionsService.consume(user.userId, id);
   }
 
-  /**
-   * GET /api/prescriptions/:id/pdf
-   * Downloads a PDF of the prescription.
-   * Access control mirrors GET /prescriptions/:id (ownership enforced).
-   */
+  @ApiOperation({
+    summary: 'Descargar PDF de prescripcion',
+    description: 'Genera y descarga el PDF de la prescripcion. Incluye datos del medico, paciente, fecha, codigo, items y estado. Mismo control de acceso que GET /:id.',
+  })
+  @ApiParam({ name: 'id', description: 'ID cuid de la prescripcion' })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({ description: 'Archivo PDF de la prescripcion.' })
+  @ApiNotFoundResponse({ description: 'Prescripcion no encontrada.' })
   @Get(':id/pdf')
   @Roles(Role.doctor, Role.patient, Role.admin)
   async getPdf(

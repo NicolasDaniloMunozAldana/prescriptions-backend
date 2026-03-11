@@ -1,4 +1,14 @@
 import { Controller, Get, Param, Query, StreamableFile } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -7,6 +17,9 @@ import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { QueryAdminPrescriptionsDto } from '../prescriptions/dto/query-admin-prescriptions.dto';
 import { QueryMetricsDto } from '../prescriptions/dto/query-metrics.dto';
 
+@ApiTags('Admin')
+@ApiBearerAuth('access-token')
+@ApiForbiddenResponse({ description: 'Se requiere rol admin.' })
 @Controller('admin')
 @Roles(Role.admin)
 export class AdminController {
@@ -14,20 +27,23 @@ export class AdminController {
     private readonly prescriptionsService: PrescriptionsService,
   ) {}
 
-  /**
-   * GET /api/admin/prescriptions
-   * Returns all prescriptions with optional filters by status, doctorId, patientId, date range.
-   * Only accessible by admins.
-   */
+  @ApiOperation({
+    summary: 'Listar todas las prescripciones [admin]',
+    description: 'Retorna todas las prescripciones del sistema. Filtrable por estado, médico, paciente y rango de fechas. Soporta paginación.',
+  })
+  @ApiOkResponse({ description: 'Lista paginada de prescripciones.' })
   @Get('prescriptions')
   findAllPrescriptions(@Query() query: QueryAdminPrescriptionsDto) {
     return this.prescriptionsService.findAllAdmin(query);
   }
 
-  /**
-   * GET /api/admin/prescriptions/:id
-   * Returns a single prescription (admin can see any).
-   */
+  @ApiOperation({
+    summary: 'Obtener prescripción por ID [admin]',
+    description: 'Retorna el detalle completo de cualquier prescripción del sistema, incluyendo ítems, médico y paciente.',
+  })
+  @ApiParam({ name: 'id', description: 'ID cuid de la prescripción' })
+  @ApiOkResponse({ description: 'Detalle de la prescripción.' })
+  @ApiNotFoundResponse({ description: 'Prescripción no encontrada.' })
   @Get('prescriptions/:id')
   findOnePrescription(
     @Param('id') id: string,
@@ -36,10 +52,14 @@ export class AdminController {
     return this.prescriptionsService.findOne(user, id);
   }
 
-  /**
-   * GET /api/admin/prescriptions/:id/pdf
-   * Downloads the PDF for any prescription.
-   */
+  @ApiOperation({
+    summary: 'Descargar PDF de prescripción [admin]',
+    description: 'Genera y descarga el PDF de cualquier prescripción del sistema.',
+  })
+  @ApiParam({ name: 'id', description: 'ID cuid de la prescripción' })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({ description: 'Archivo PDF de la prescripción.' })
+  @ApiNotFoundResponse({ description: 'Prescripción no encontrada.' })
   @Get('prescriptions/:id/pdf')
   async getPrescriptionPdf(
     @Param('id') id: string,
@@ -52,11 +72,21 @@ export class AdminController {
     });
   }
 
-  /**
-   * GET /api/admin/metrics?from=&to=
-   * Returns aggregated metrics: totals, by-status, by-day, top doctors.
-   * Only accessible by admins.
-   */
+  @ApiOperation({
+    summary: 'Métricas de prescripciones [admin]',
+    description: 'Retorna métricas agregadas: total, por estado (`pending`/`consumed`), por día y top médicos emisores. Filtrable por rango de fechas (`from` / `to` en formato ISO).',
+  })
+  @ApiOkResponse({
+    description: 'Métricas calculadas.',
+    schema: {
+      example: {
+        total: 120,
+        byStatus: { pending: 80, consumed: 40 },
+        byDay: [{ date: '2026-03-10', count: 5 }],
+        topDoctors: [{ doctorId: 'cuid…', name: 'Dr. Smith', count: 30 }],
+      },
+    },
+  })
   @Get('metrics')
   getMetrics(@Query() query: QueryMetricsDto) {
     return this.prescriptionsService.getMetrics(query);
