@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsEnum,
+  IsISO8601,
   IsOptional,
   IsString,
   MinLength,
@@ -22,4 +23,14 @@ export class RegisterDto {
   @IsEnum(Role, { message: 'Role must be admin, doctor or patient' })
   @IsOptional()
   role?: Role;
+
+  /** Solo aplica cuando role = doctor */
+  @IsString()
+  @IsOptional()
+  specialty?: string;
+
+  /** Solo aplica cuando role = patient — ISO 8601 (ej. 1990-05-20) */
+  @IsISO8601({}, { message: 'birthDate must be a valid ISO 8601 date' })
+  @IsOptional()
+  birthDate?: string;
 }

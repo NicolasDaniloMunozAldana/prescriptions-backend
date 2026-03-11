@@ -30,13 +30,28 @@ export class AuthService {
     });
     if (existing) throw new ConflictException('Email already in use');
 
+    const role = dto.role ?? Role.patient;
     const hashed = await bcrypt.hash(dto.password, 10);
+
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         password: hashed,
         name: dto.name,
-        role: dto.role ?? Role.patient,
+        role,
+        // Crear perfil vinculado según el rol
+        ...(role === Role.doctor
+          ? { doctor: { create: { specialty: dto.specialty ?? null } } }
+          : {}),
+        ...(role === Role.patient
+          ? {
+              patient: {
+                create: {
+                  birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+                },
+              },
+            }
+          : {}),
       },
     });
 
