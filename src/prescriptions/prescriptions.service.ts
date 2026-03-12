@@ -54,7 +54,7 @@ function generateCode(): string {
 
 @Injectable()
 export class PrescriptionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ─── Doctor: create ────────────────────────────────────────────────────────
 
@@ -280,7 +280,7 @@ export class PrescriptionsService {
       totalPrescriptions,
       byStatus,
       prescriptionsByDay,
-      topDoctors,
+      topDoctorsAgg,
     ] = await Promise.all([
       this.prisma.doctor.count(),
       this.prisma.patient.count(),
@@ -290,15 +290,14 @@ export class PrescriptionsService {
         where: prescriptionWhere,
         _count: { status: true },
       }),
-      // Raw query to group by calendar day (Prisma groupBy doesn't support DATE truncation)
       this.prisma.$queryRaw<{ date: Date; count: bigint }[]>`
-        SELECT DATE("createdAt") AS date, COUNT(*)::int AS count
-        FROM "Prescription"
-        WHERE "createdAt" >= ${fromDate}
-          AND "createdAt" <= ${toDate}
-        GROUP BY DATE("createdAt")
-        ORDER BY date ASC
-      `,
+      SELECT DATE("createdAt") AS date, COUNT(*)::int AS count
+      FROM "Prescription"
+      WHERE "createdAt" >= ${fromDate}
+        AND "createdAt" <= ${toDate}
+      GROUP BY DATE("createdAt")
+      ORDER BY date ASC
+    `,
       this.prisma.prescription.groupBy({
         by: ['authorId'],
         where: prescriptionWhere,
@@ -307,6 +306,25 @@ export class PrescriptionsService {
         take: 5,
       }),
     ]);
+
+    const doctorIds = topDoctorsAgg.map((d) => d.authorId);
+
+    const doctors = doctorIds.length
+      ? await this.prisma.doctor.findMany({
+        where: {
+          id: { in: doctorIds },
+        },
+        include: {
+          user: {
+            select: { name: true },
+          },
+        },
+      })
+      : [];
+
+    const doctorNameById = new Map(
+      doctors.map((doctor) => [doctor.id, doctor.user.name]),
+    );
 
     return {
       totals: {
@@ -324,10 +342,12 @@ export class PrescriptionsService {
             : String(r.date),
         count: Number(r.count),
       })),
-      topDoctors: topDoctors.map((d) => ({
+      topDoctors: topDoctorsAgg.map((d) => ({
         doctorId: d.authorId,
+        name: doctorNameById.get(d.authorId),
         count: d._count.authorId,
       })),
     };
   }
+
 }
