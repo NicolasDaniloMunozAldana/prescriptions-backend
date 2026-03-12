@@ -33,15 +33,7 @@ Desarrollado con ♥ por Nicolás para Nutrabiotics.
 
 ## Setup local
 
-### 1. Crear la base de datos
-
-Conéctate a PostgreSQL y crea la base de datos:
-
-```bash
-psql -U postgres -c "CREATE DATABASE prescriptions;"
-```
-
-### 2. Configurar variables de entorno
+### 1. Configurar variables de entorno
 
 Copia el archivo de ejemplo y edítalo:
 
@@ -60,6 +52,8 @@ JWT_REFRESH_SECRET="cambia-este-otro-secreto-en-produccion"
 JWT_ACCESS_TTL="900s"
 JWT_REFRESH_TTL="7d"
 
+RUN_SEED = true
+
 APP_ORIGIN="http://localhost:3000"
 
 PORT=4000
@@ -67,13 +61,13 @@ PORT=4000
 
 > ⚠️ Reemplaza `<TU_PASSWORD>` con la contraseña de tu usuario de PostgreSQL.
 
-### 3. Instalar dependencias
+### 2. Instalar dependencias
 
 ```bash
 npm install
 ```
 
-### 4. Ejecutar migraciones y seed
+### 3. Ejecutar migraciones y seed
 
 ```bash
 # Genera el cliente de Prisma
@@ -86,7 +80,7 @@ npx prisma migrate deploy
 npx prisma db seed
 ```
 
-### 5. Iniciar el servidor
+### 4. Iniciar el servidor
 
 ```bash
 # Desarrollo (hot-reload)
