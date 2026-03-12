@@ -21,11 +21,11 @@ export class QueryUsersDto {
   @IsOptional()
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20, default: 20, description: 'Resultados por página (máx. 100)' })
+  @ApiPropertyOptional({ example: 20, default: 20, description: 'Resultados por página (máx. 10)' })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(10)
   @IsOptional()
-  limit?: number = 20;
+  limit?: number = 10;
 }
