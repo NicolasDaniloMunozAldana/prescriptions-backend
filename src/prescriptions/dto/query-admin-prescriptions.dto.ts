@@ -36,13 +36,13 @@ export class QueryAdminPrescriptionsDto {
   @IsOptional()
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20, default: 20, maximum: 100 })
+  @ApiPropertyOptional({ example: 20, default: 20, maximum: 10 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(10)
   @IsOptional()
-  limit?: number = 20;
+  limit?: number = 10;
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc' })
   @IsEnum(['asc', 'desc'])

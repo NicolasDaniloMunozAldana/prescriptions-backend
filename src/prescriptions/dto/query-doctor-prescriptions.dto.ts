@@ -26,13 +26,13 @@ export class QueryDoctorPrescriptionsDto {
   @IsOptional()
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20, default: 20, description: 'Resultados por página (máx. 100)' })
+  @ApiPropertyOptional({ example: 20, default: 20, description: 'Resultados por página (máx. 10)' })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(10)
   @IsOptional()
-  limit?: number = 20;
+  limit?: number = 10;
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc', description: 'Dirección de ordenamiento por fecha de creación' })
   @IsEnum(['asc', 'desc'])
