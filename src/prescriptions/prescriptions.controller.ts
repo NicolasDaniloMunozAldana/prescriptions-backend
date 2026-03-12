@@ -8,6 +8,7 @@
   Post,
   Put,
   Query,
+  Req,
   StreamableFile,
 } from '@nestjs/common';
 import {
@@ -26,6 +27,7 @@ import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../auth/interfaces/jwt-payload.interface';
+import type { Request } from 'express';
 import { PrescriptionsService } from './prescriptions.service';
 import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { QueryDoctorPrescriptionsDto } from './dto/query-doctor-prescriptions.dto';
@@ -38,6 +40,31 @@ export class PrescriptionsController {
   constructor(
     private readonly prescriptionsService: PrescriptionsService,
   ) { }
+
+  private getFrontendBaseUrl(req: Request): string | undefined {
+    const frontendOrigin = req.headers['x-frontend-origin'];
+    if (typeof frontendOrigin === 'string' && frontendOrigin.length > 0) {
+      return frontendOrigin;
+    }
+
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && origin.length > 0) {
+      return origin;
+    }
+
+    const host = req.headers['x-forwarded-host'] ?? req.headers.host;
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const proto =
+      (typeof forwardedProto === 'string' && forwardedProto.split(',')[0]) ||
+      req.protocol ||
+      'http';
+
+    if (typeof host === 'string' && host.length > 0) {
+      return `${proto}://${host}`;
+    }
+
+    return undefined;
+  }
 
   // ─── Doctor ──────────────────────────────────────────────────────────────────
 
@@ -133,8 +160,15 @@ export class PrescriptionsController {
   async getPdf(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
+    @Req() req: Request,
   ): Promise<StreamableFile> {
-    const buffer = await this.prescriptionsService.generatePdf(user, id);
+    const frontendBaseUrl = this.getFrontendBaseUrl(req);
+    const buffer = await this.prescriptionsService.generatePdf(
+      user,
+      id,
+      frontendBaseUrl,
+    );
+
     return new StreamableFile(buffer, {
       type: 'application/pdf',
       disposition: `attachment; filename="prescription-${id}.pdf"`,
