@@ -1,6 +1,199 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Prescriptions API — Backend
+
+Sistema de gestión de prescripciones médicas. API REST construida con **NestJS** que expone los recursos de autenticación, usuarios, doctores, pacientes y prescripciones con control de acceso basado en roles (RBAC).
+
+Desarrollado con ♥ por Nicolás para Nutrabiotics.
+
+---
+
+## Stack técnico
+
+| Capa | Tecnología |
+|---|---|
+| Framework | NestJS 11 |
+| Lenguaje | TypeScript 5 |
+| ORM | Prisma 7 + `@prisma/adapter-pg` |
+| Base de datos | PostgreSQL 14+ |
+| Autenticación | JWT dual-token (access + refresh) en cookies `httpOnly` |
+| PDF | PDFKit 0.17 |
+| Validación | class-validator + class-transformer |
+| Documentación | Swagger / OpenAPI (`@nestjs/swagger`) |
+| Seguridad | Helmet · `@nestjs/throttler` (100 req/60 s) · bcrypt 6 |
+| Testing | Jest 30 · Supertest |
+
+---
+
+## Requisitos previos
+
+- **Node.js 18+**
+- **PostgreSQL 14+** instalado y corriendo localmente
+- `npm`
+
+---
+
+## Setup local
+
+### 1. Crear la base de datos
+
+Conéctate a PostgreSQL y crea la base de datos:
+
+```bash
+psql -U postgres -c "CREATE DATABASE prescriptions;"
+```
+
+### 2. Configurar variables de entorno
+
+Copia el archivo de ejemplo y edítalo:
+
+```bash
+cp .env.example .env
+```
+
+Contenido de `.env`:
+
+```env
+DATABASE_URL="postgresql://postgres:<TU_PASSWORD>@localhost:5432/prescriptions?schema=public"
+
+JWT_ACCESS_SECRET="cambia-este-secreto-en-produccion"
+JWT_REFRESH_SECRET="cambia-este-otro-secreto-en-produccion"
+
+JWT_ACCESS_TTL="900s"
+JWT_REFRESH_TTL="7d"
+
+APP_ORIGIN="http://localhost:3000"
+
+PORT=4000
+```
+
+> ⚠️ Reemplaza `<TU_PASSWORD>` con la contraseña de tu usuario de PostgreSQL.
+
+### 3. Instalar dependencias
+
+```bash
+npm install
+```
+
+### 4. Ejecutar migraciones y seed
+
+```bash
+# Genera el cliente de Prisma
+npx prisma generate
+
+# Aplica las migraciones
+npx prisma migrate deploy
+
+# Pobla la base de datos con datos de prueba
+npx prisma db seed
+```
+
+### 5. Iniciar el servidor
+
+```bash
+# Desarrollo (hot-reload)
+npm run start:dev
+
+# Producción
+npm run build
+npm run start:prod
+```
+
+Servidor disponible en: **http://localhost:4000**  
+Documentación Swagger: **http://localhost:4000/docs**
+
+---
+
+## Cuentas de prueba
+
+Creadas automáticamente por el seed:
+
+| Rol | Email | Contraseña |
+|---|---|---|
+| Administrador | `admin@test.com` | `admin123` |
+| Doctor | `dr@test.com` | `dr123` |
+| Paciente | `patient@test.com` | `patient123` |
+
+---
+
+## Estructura del proyecto
+
+```
+prescriptions-backend/
+├── prisma/
+│   ├── schema.prisma        # Esquema de la base de datos
+│   ├── seed.ts              # Datos de prueba
+│   └── migrations/          # Historial de migraciones
+└── src/
+    ├── main.ts              # Bootstrap: Helmet, CORS, Swagger, ValidationPipe
+    ├── app.module.ts        # Módulo raíz (ThrottlerModule, ConfigModule)
+    ├── auth/                # Login, registro, refresh, logout · estrategias JWT
+    ├── users/               # CRUD de usuarios (admin)
+    ├── doctors/             # Listado de doctores y sus pacientes
+    ├── patients/            # Listado de pacientes
+    ├── prescriptions/       # CRUD de prescripciones + consumo + generación de PDF
+    ├── admin/               # Métricas globales del sistema
+    ├── prisma/              # PrismaService inyectable
+    └── common/              # Guards, decoradores y filtros reutilizables
+```
+
+---
+
+## Endpoints principales
+
+| Método | Ruta | Rol requerido | Descripción |
+|---|---|---|---|
+| POST | `/api/auth/login` | — | Iniciar sesión |
+| POST | `/api/auth/register` | — | Registrar cuenta |
+| POST | `/api/auth/refresh` | — | Renovar access token |
+| POST | `/api/auth/logout` | Autenticado | Cerrar sesión |
+| GET | `/api/auth/profile` | Autenticado | Perfil del usuario actual |
+| GET | `/api/users` | `admin` | Listar usuarios |
+| POST | `/api/users` | `admin` | Crear usuario |
+| DELETE | `/api/users/:id` | `admin` | Eliminar usuario |
+| GET | `/api/prescriptions` | `doctor` · `patient` | Listar prescripciones (paginado) |
+| POST | `/api/prescriptions` | `doctor` | Crear prescripción |
+| PUT | `/api/prescriptions/:id/consume` | `patient` | Marcar como consumida |
+| GET | `/api/prescriptions/:id/pdf` | `patient` | Descargar PDF |
+| GET | `/api/admin/metrics` | `admin` | Métricas del sistema |
+
+Documentación completa interactiva en `/docs`.
+
+---
+
+## Scripts disponibles
+
+```bash
+npm run start:dev      # Desarrollo con hot-reload
+npm run start:prod     # Producción (requiere build previo)
+npm run build          # Compilar a dist/
+
+npm run test           # Tests unitarios
+npm run test:e2e       # Tests end-to-end
+npm run test:cov       # Tests con cobertura
+
+npx prisma studio      # UI visual de la base de datos
+npx prisma migrate dev # Crear nueva migración
+npx prisma db seed     # Ejecutar seed
+npx prisma generate    # Regenerar el cliente de Prisma
+```
+
+---
+
+## Notas de seguridad
+
+- Los secrets de JWT en `.env.example` son de demostración. **Cámbialos en cualquier entorno real.**
+- Rate limiting: 100 req / 60 s por IP (vía `@nestjs/throttler`).
+- Contraseñas hasheadas con `bcrypt` (10 salt rounds).
+- Tokens JWT en cookies `httpOnly; SameSite=lax` — inaccesibles desde JavaScript.
+- `helmet` aplicado en todas las rutas excepto `/docs`.
+
+---
+
+## Puertos
+
+| Servicio | Puerto |
+|---|---|
+| API NestJS | 4000 |
+| PostgreSQL | 5432 |
 
 [circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
 [circleci-url]: https://circleci.com/gh/nestjs/nest
