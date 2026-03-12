@@ -36,12 +36,20 @@ const PRESCRIPTION_INCLUDE = {
 
 function dateRangeFilter(from?: string, to?: string) {
   if (!from && !to) return {};
-  return {
-    createdAt: {
-      ...(from ? { gte: new Date(from) } : {}),
-      ...(to ? { lte: new Date(to) } : {}),
-    },
-  };
+
+  const createdAt: { gte?: Date; lt?: Date } = {};
+
+  if (from) {
+    createdAt.gte = new Date(`${from}T00:00:00`);
+  }
+
+  if (to) {
+    const toExclusive = new Date(`${to}T00:00:00`);
+    toExclusive.setDate(toExclusive.getDate() + 1);
+    createdAt.lt = toExclusive;
+  }
+
+  return { createdAt };
 }
 
 // ─── Helper: unique prescription code ────────────────────────────────────────
@@ -266,12 +274,17 @@ export class PrescriptionsService {
     const { from, to } = query;
 
     const fromDate = from
-      ? new Date(from)
+      ? new Date(`${from}T00:00:00`)
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const toDate = to ? new Date(to) : new Date();
-
+    let toDateExclusive: Date;
+    if (to) {
+      toDateExclusive = new Date(`${to}T00:00:00`);
+      toDateExclusive.setDate(toDateExclusive.getDate() + 1);
+    } else {
+      toDateExclusive = new Date();
+    }
     const prescriptionWhere = {
-      createdAt: { gte: fromDate, lte: toDate },
+      createdAt: { gte: fromDate, lte: toDateExclusive },
     };
 
     const [
@@ -294,7 +307,7 @@ export class PrescriptionsService {
       SELECT DATE("createdAt") AS date, COUNT(*)::int AS count
       FROM "Prescription"
       WHERE "createdAt" >= ${fromDate}
-        AND "createdAt" <= ${toDate}
+        AND "createdAt" < ${toDateExclusive}
       GROUP BY DATE("createdAt")
       ORDER BY date ASC
     `,
