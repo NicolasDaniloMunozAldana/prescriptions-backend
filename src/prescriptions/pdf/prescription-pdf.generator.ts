@@ -1,4 +1,5 @@
 import PDFDocument = require('pdfkit');
+import QRCode = require('qrcode');
 import {
   Doctor,
   Patient,
@@ -13,12 +14,44 @@ export type FullPrescription = Prescription & {
   author: Doctor & { user: Pick<User, 'name' | 'email'> };
 };
 
-const BRAND_COLOR = '#1a56db';
+const BRAND_COLOR = '#0098D0';
 const GRAY = '#6b7280';
 
-export function generatePrescriptionPdf(
+type GeneratePrescriptionPdfOptions = {
+  frontendBaseUrl?: string;
+  detailPath?: string;
+};
+
+function sanitizeBaseUrl(baseUrl?: string): string {
+  const fallback = process.env.FRONTEND_URL || 'http://localhost:3001';
+  if (!baseUrl) return fallback.replace(/\/$/, '');
+
+  const trimmed = baseUrl.trim().replace(/\/$/, '');
+  if (!trimmed) return fallback.replace(/\/$/, '');
+
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  return `https://${trimmed}`;
+}
+
+export async function generatePrescriptionPdf(
   prescription: FullPrescription,
+  options: GeneratePrescriptionPdfOptions = {},
 ): Promise<Buffer> {
+  const baseUrl = sanitizeBaseUrl(options.frontendBaseUrl);
+  const detailPath = options.detailPath ?? `/dashboard/prescriptions/${prescription.id}`;
+  const prescriptionUrl = `${baseUrl}${detailPath}`;
+
+  const qrCodeImage = await QRCode.toDataURL(prescriptionUrl, {
+    errorCorrectionLevel: 'H',
+    width: 200,
+    margin: 1,
+    color: {
+      dark: BRAND_COLOR,
+      light: '#ffffff',
+    },
+  });
+
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
@@ -43,10 +76,24 @@ export function generatePrescriptionPdf(
       .font('Helvetica')
       .text(`Código: ${prescription.code}`, 50, 55, { align: 'center' });
 
-    doc.fillColor('black').moveDown(3);
+    // Add QR code in the top right corner
+    const qrSize = 60;
+    const qrX = doc.page.width - 50 - qrSize;
+    const qrY = 10;
+    doc.image(qrCodeImage, qrX, qrY, { width: qrSize, height: qrSize });
+    doc
+      .fontSize(6)
+      .font('Helvetica')
+      .fillColor('white')
+      .text('Ver detalle', qrX, qrY + qrSize + 2, {
+        width: qrSize,
+        align: 'center',
+      });
+
+    doc.fillColor('black').moveDown(2);
 
     // ── Info columns ─────────────────────────────────────────────────────────
-    const startY = 110;
+    const startY = 100;
     const colLeft = 50;
     const colRight = 310;
 
@@ -81,7 +128,7 @@ export function generatePrescriptionPdf(
       .text(prescription.patient.user.email, colRight, startY + 30);
 
     // Status & dates
-    const infoY = startY + 60;
+    const infoY = startY + 50;
     const statusLabel =
       prescription.status === 'consumed' ? 'Consumida' : 'Pendiente';
     const statusColor =
@@ -113,7 +160,7 @@ export function generatePrescriptionPdf(
 
     // Notes
     if (prescription.notes) {
-      const notesY = infoY + (prescription.consumedAt ? 64 : 50);
+      const notesY = infoY + (prescription.consumedAt ? 60 : 46);
       doc
         .fillColor(BRAND_COLOR)
         .font('Helvetica-Bold')
@@ -126,7 +173,7 @@ export function generatePrescriptionPdf(
     }
 
     // ── Divider ──────────────────────────────────────────────────────────────
-    const dividerY = doc.y + 18;
+    const dividerY = doc.y + 12;
     doc
       .moveTo(50, dividerY)
       .lineTo(doc.page.width - 50, dividerY)
@@ -135,54 +182,69 @@ export function generatePrescriptionPdf(
       .stroke();
 
     // ── Items table ──────────────────────────────────────────────────────────
-    const tableStartY = dividerY + 14;
+    const tableStartY = dividerY + 10;
     doc
-      .fontSize(11)
+      .fontSize(10)
       .font('Helvetica-Bold')
       .fillColor(BRAND_COLOR)
       .text('ÍTEMS DE LA PRESCRIPCIÓN', 50, tableStartY);
 
     // Table header
-    const headerY = tableStartY + 18;
-    doc.rect(50, headerY, 495, 18).fill('#e0e7ff');
+    const headerY = tableStartY + 14;
+    doc.rect(50, headerY, 495, 16).fill('#e0e7ff');
     doc
-      .fontSize(9)
+      .fontSize(8)
       .font('Helvetica-Bold')
       .fillColor('#1e3a8a')
-      .text('MEDICAMENTO', 55, headerY + 4)
-      .text('DOSIS', 220, headerY + 4)
-      .text('CANTIDAD', 320, headerY + 4)
-      .text('INDICACIONES', 400, headerY + 4);
+      .text('MEDICAMENTO', 55, headerY + 3)
+      .text('DOSIS', 220, headerY + 3)
+      .text('CANTIDAD', 320, headerY + 3)
+      .text('INDICACIONES', 400, headerY + 3);
 
     // Table rows
-    let rowY = headerY + 22;
+    const footerY = doc.page.height - 40;
+    const rowHeight = 22;
+    let rowY = headerY + 18;
+    let renderedRows = 0;
+
     prescription.items.forEach((item, idx) => {
+      if (rowY + rowHeight > footerY - 16) return;
+
       const rowColor = idx % 2 === 0 ? 'white' : '#f8faff';
-      doc.rect(50, rowY, 495, 26).fill(rowColor);
+      doc.rect(50, rowY, 495, rowHeight).fill(rowColor);
 
       doc
-        .fontSize(9)
+        .fontSize(8)
         .font('Helvetica-Bold')
         .fillColor('black')
-        .text(item.name, 55, rowY + 4, { width: 155, ellipsis: true });
+        .text(item.name, 55, rowY + 3, { width: 155, ellipsis: true });
 
       doc
         .font('Helvetica')
         .fillColor('#374151')
-        .text(item.dosage ?? '—', 220, rowY + 4, { width: 90 })
-        .text(item.quantity != null ? String(item.quantity) : '—', 320, rowY + 4, {
+        .text(item.dosage ?? '—', 220, rowY + 3, { width: 90 })
+        .text(item.quantity != null ? String(item.quantity) : '—', 320, rowY + 3, {
           width: 70,
         })
-        .text(item.instructions ?? '—', 400, rowY + 4, {
+        .text(item.instructions ?? '—', 400, rowY + 3, {
           width: 140,
           ellipsis: true,
         });
 
-      rowY += 28;
+      rowY += 24;
+      renderedRows += 1;
     });
 
+    if (renderedRows < prescription.items.length) {
+      const remaining = prescription.items.length - renderedRows;
+      doc
+        .fontSize(8)
+        .font('Helvetica-Oblique')
+        .fillColor(GRAY)
+        .text(`+${remaining} ítem(s) adicional(es)`, 55, rowY + 2);
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────────
-    const footerY = doc.page.height - 50;
     doc
       .moveTo(50, footerY)
       .lineTo(doc.page.width - 50, footerY)
@@ -197,7 +259,7 @@ export function generatePrescriptionPdf(
       .text(
         `Documento generado el ${new Date().toLocaleDateString('es-ES')} — Sistema de Prescripciones Médicas`,
         50,
-        footerY + 8,
+        footerY + 6,
         { align: 'center', width: 495 },
       );
 

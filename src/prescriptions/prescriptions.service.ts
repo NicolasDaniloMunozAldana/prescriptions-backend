@@ -223,10 +223,25 @@ export class PrescriptionsService {
 
   // ─── Shared: generate PDF (ownership enforced by findOne) ──────────────────
 
-  async generatePdf(user: RequestUser, id: string): Promise<Buffer> {
+  async generatePdf(
+    user: RequestUser,
+    id: string,
+    frontendBaseUrl?: string,
+  ): Promise<Buffer> {
     // Reuse findOne — ownership rules are already enforced per role
     const prescription = (await this.findOne(user, id)) as FullPrescription;
-    return generatePrescriptionPdf(prescription);
+
+    let detailPath = `/dashboard/prescriptions/${id}`;
+    if (user.role === Role.doctor) {
+      detailPath = `/doctor/prescriptions/${id}`;
+    } else if (user.role === Role.admin) {
+      detailPath = `/admin/prescriptions/${id}`;
+    }
+
+    return await generatePrescriptionPdf(prescription, {
+      frontendBaseUrl,
+      detailPath,
+    });
   }
 
   // ─── Admin: list all prescriptions ────────────────────────────────────────
