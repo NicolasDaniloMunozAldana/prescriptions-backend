@@ -23,7 +23,7 @@ type GeneratePrescriptionPdfOptions = {
 };
 
 function sanitizeBaseUrl(baseUrl?: string): string {
-  const fallback = process.env.FRONTEND_URL || 'http://localhost:3001';
+  const fallback = process.env.APP_ORIGIN || 'http://localhost:3001';
   if (!baseUrl) return fallback.replace(/\/$/, '');
 
   const trimmed = baseUrl.trim().replace(/\/$/, '');

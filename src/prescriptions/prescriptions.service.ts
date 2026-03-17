@@ -226,11 +226,10 @@ export class PrescriptionsService {
   async generatePdf(
     user: RequestUser,
     id: string,
-    frontendBaseUrl?: string,
   ): Promise<Buffer> {
     // Reuse findOne — ownership rules are already enforced per role
     const prescription = (await this.findOne(user, id)) as FullPrescription;
-
+    const frontendBaseUrl = process.env.APP_ORIGIN;
     let detailPath = `/dashboard/prescriptions/${id}`;
     if (user.role === Role.doctor) {
       detailPath = `/doctor/prescriptions/${id}`;
@@ -239,7 +238,6 @@ export class PrescriptionsService {
     }
 
     return await generatePrescriptionPdf(prescription, {
-      frontendBaseUrl,
       detailPath,
     });
   }

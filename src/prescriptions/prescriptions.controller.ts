@@ -160,13 +160,10 @@ export class PrescriptionsController {
   async getPdf(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
-    @Req() req: Request,
   ): Promise<StreamableFile> {
-    const frontendBaseUrl = this.getFrontendBaseUrl(req);
     const buffer = await this.prescriptionsService.generatePdf(
       user,
-      id,
-      frontendBaseUrl,
+      id
     );
 
     return new StreamableFile(buffer, {
